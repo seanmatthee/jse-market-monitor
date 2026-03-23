@@ -1,0 +1,6 @@
+flask>=3.0
+gunicorn>=21.2
+yfinance>=0.2
+pandas>=2.0
+numpy>=1.24
+apscheduler>=3.10

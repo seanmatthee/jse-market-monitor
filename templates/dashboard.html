@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>JSE Market Monitor</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --card: #161b22;
+            --border: #30363d;
+            --text: #e6edf3;
+            --dim: #8b949e;
+            --green: #3fb950;
+            --red: #f85149;
+            --yellow: #d29922;
+            --blue: #58a6ff;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif;
+            padding: 16px;
+            padding-bottom: 80px;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        header h1 { font-size: 22px; }
+        header h1 .flag { margin-right: 8px; }
+        header .meta { color: var(--dim); font-size: 13px; text-align: right; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 16px;
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 18px;
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 14px;
+        }
+        .card-header h2 { font-size: 18px; }
+        .card-header .price { font-size: 22px; font-weight: 700; }
+        .card-header .symbol { color: var(--dim); font-size: 12px; }
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .badge.bullish { background: rgba(63,185,80,0.15); color: var(--green); }
+        .badge.strongly-bullish { background: rgba(63,185,80,0.3); color: var(--green); }
+        .badge.bearish { background: rgba(248,81,73,0.15); color: var(--red); }
+        .badge.strongly-bearish { background: rgba(248,81,73,0.3); color: var(--red); }
+        .badge.neutral { background: rgba(210,153,34,0.15); color: var(--yellow); }
+        .change-positive { color: var(--green); }
+        .change-negative { color: var(--red); }
+
+        .score-bar {
+            height: 6px; border-radius: 3px; background: var(--border);
+            margin: 12px 0; overflow: hidden;
+        }
+        .score-bar .fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+        .score-bar .fill.bullish { background: var(--green); }
+        .score-bar .fill.bearish { background: var(--red); }
+        .score-bar .fill.neutral { background: var(--yellow); }
+
+        .score-label {
+            display: flex; justify-content: space-between;
+            font-size: 11px; color: var(--dim); margin-bottom: 4px;
+        }
+
+        .metrics {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 6px 12px; margin: 12px 0; font-size: 13px;
+        }
+        .metrics .label { color: var(--dim); }
+        .metrics .value { text-align: right; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+        .signals-table {
+            width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px;
+        }
+        .signals-table th {
+            text-align: left; color: var(--dim); font-weight: 500;
+            padding: 5px 6px; border-bottom: 1px solid var(--border); font-size: 11px;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .signals-table td { padding: 4px 6px; border-bottom: 1px solid rgba(48,54,61,0.4); }
+        .vote-bull { color: var(--green); font-weight: 600; }
+        .vote-bear { color: var(--red); font-weight: 600; }
+        .vote-neut { color: var(--yellow); font-weight: 600; }
+
+        .trade-box {
+            border-radius: 8px; padding: 12px; margin-top: 12px; font-size: 13px;
+        }
+        .trade-box.active {
+            background: rgba(88,166,255,0.08); border: 1px solid rgba(88,166,255,0.2);
+        }
+        .trade-box.wait {
+            background: rgba(210,153,34,0.05); border: 1px solid rgba(210,153,34,0.2);
+        }
+        .trade-box h4 { margin-bottom: 6px; font-size: 13px; }
+        .trade-box .row { display: flex; justify-content: space-between; margin: 3px 0; }
+        .trade-box .row .label { color: var(--dim); }
+
+        .error-card { border-color: var(--red); opacity: 0.6; }
+        .error-msg { color: var(--red); font-style: italic; }
+
+        .countdown {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: var(--card); border-top: 1px solid var(--border);
+            padding: 10px 16px; font-size: 12px; color: var(--dim);
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 10;
+        }
+        .countdown .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--green); display: inline-block; margin-right: 6px;
+        }
+
+        /* Confluence panel */
+        .confluence {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 20px; margin-bottom: 20px;
+        }
+        .confluence h2 { font-size: 18px; margin-bottom: 14px; }
+        .confluence-overall {
+            display: flex; align-items: center; gap: 16px;
+            flex-wrap: wrap; margin-bottom: 16px;
+        }
+        .confluence-overall .big-bias {
+            font-size: 28px; font-weight: 800; letter-spacing: -0.5px;
+        }
+        .confluence-overall .big-bias.bullish { color: var(--green); }
+        .confluence-overall .big-bias.bearish { color: var(--red); }
+        .confluence-overall .big-bias.neutral { color: var(--yellow); }
+        .confluence-stats {
+            display: flex; gap: 20px; font-size: 13px; color: var(--dim); flex-wrap: wrap;
+        }
+        .confluence-stats .stat-val { color: var(--text); font-weight: 600; }
+        .confluence-groups {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px; margin-top: 14px;
+        }
+        .conf-group {
+            background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+            border-radius: 8px; padding: 12px;
+        }
+        .conf-group h4 { font-size: 13px; margin-bottom: 6px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; }
+        .conf-group .group-bias { font-weight: 700; font-size: 15px; }
+        .conf-group .group-tickers { font-size: 11px; color: var(--dim); margin-top: 4px; }
+        .conf-group .group-bar { height: 4px; border-radius: 2px; background: var(--border); margin-top: 8px; overflow: hidden; }
+        .conf-group .group-bar .fill { height: 100%; border-radius: 2px; }
+
+        .footer-credit {
+            text-align: center;
+            color: var(--dim);
+            font-size: 12px;
+            margin-top: 32px;
+            padding: 16px 0;
+            border-top: 1px solid var(--border);
+        }
+
+        @media (max-width: 600px) {
+            body { padding: 12px; padding-bottom: 70px; }
+            .grid { grid-template-columns: 1fr; }
+            .card-header .price { font-size: 20px; }
+            header h1 { font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1><span class="flag">🇿🇦</span>JSE Market Monitor</h1>
+        <div class="meta">
+            Last scan: {{ last_scan }}<br>
+            Watchlist: {{ analyses|length }} tickers
+        </div>
+    </header>
+
+    {% if confluence %}
+    <div class="confluence">
+        <h2>Order Flow Confluence</h2>
+        <div class="confluence-overall">
+            {% set bias_class = 'bullish' if 'BULLISH' in confluence.overall_bias else 'bearish' if 'BEARISH' in confluence.overall_bias else 'neutral' %}
+            <span class="big-bias {{ bias_class }}">{{ confluence.overall_bias }}</span>
+            <span class="badge {{ bias_class }}">
+                {{ confluence.overall_bullish }}B / {{ confluence.overall_bearish }}R / {{ confluence.overall_neutral }}N
+            </span>
+        </div>
+        <div class="confluence-stats">
+            <span>Agreement: <span class="stat-val">{{ "%.0f"|format(confluence.agreement_pct) }}%</span></span>
+            <span>Strength: <span class="stat-val" style="color: {{ 'var(--green)' if confluence.overall_strength > 0 else 'var(--red)' if confluence.overall_strength < 0 else 'var(--yellow)' }}">{{ "%+.0f"|format(confluence.overall_strength) }}</span></span>
+            <span>Instruments: <span class="stat-val">{{ confluence.overall_total }}</span></span>
+        </div>
+        <div class="confluence-groups">
+            {% for g in confluence.groups %}
+            <div class="conf-group">
+                <h4>{{ g.name }}</h4>
+                {% set g_class = 'bullish' if 'BULLISH' in g.bias else 'bearish' if 'BEARISH' in g.bias else 'neutral' %}
+                <span class="group-bias" style="color: {{ 'var(--green)' if 'BULLISH' in g.bias else 'var(--red)' if 'BEARISH' in g.bias else 'var(--yellow)' }}">
+                    {{ g.bias }}
+                </span>
+                <span style="font-size: 12px; color: var(--dim); margin-left: 6px;">
+                    {{ g.bullish_count }}B / {{ g.bearish_count }}R
+                    {% if g.volume_total > 0 %}
+                     | Vol: {{ g.volume_rising }}/{{ g.volume_total }} rising
+                    {% endif %}
+                </span>
+                <div class="group-bar">
+                    {% set gpct = ((g.strength + 100) / 2)|int %}
+                    <div class="fill {{ 'bullish' if g.strength >= 0 else 'bearish' }}" style="width: {{ gpct }}%; background: {{ 'var(--green)' if g.strength > 0 else 'var(--red)' if g.strength < 0 else 'var(--yellow)' }}"></div>
+                </div>
+                <div class="group-tickers">{{ g.tickers | join(', ') }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid">
+    {% for a in analyses %}
+        <div class="card {% if a.error %}error-card{% endif %}">
+            <div class="card-header">
+                <div>
+                    <h2>{{ a.name }}</h2>
+                    <span class="symbol">{{ a.symbol }}</span>
+                </div>
+                <div style="text-align: right;">
+                    <div class="price">{% if '=X' in a.symbol %}{{ "{:,.4f}".format(a.price) }}{% else %}R{{ "{:,.2f}".format(a.price) }}{% endif %}</div>
+                    <span class="{{ 'change-positive' if a.daily_change_pct >= 0 else 'change-negative' }}">
+                        {{ "%+.2f"|format(a.daily_change_pct) }}%
+                    </span>
+                </div>
+            </div>
+
+            {% if a.error %}
+                <p class="error-msg">{{ a.error }}</p>
+            {% else %}
+                <span class="badge {{ a.bias|lower|replace(' ', '-') }}">{{ a.bias }}</span>
+
+                <div class="score-label">
+                    <span>Bearish ({{ a.bearish }})</span>
+                    <span>Bullish ({{ a.bullish }})</span>
+                </div>
+                <div class="score-bar">
+                    {% set pct = ((a.score_pct + 100) / 2)|int %}
+                    {% if a.score_pct >= 20 %}
+                    <div class="fill bullish" style="width: {{ pct }}%"></div>
+                    {% elif a.score_pct <= -20 %}
+                    <div class="fill bearish" style="width: {{ pct }}%"></div>
+                    {% else %}
+                    <div class="fill neutral" style="width: {{ pct }}%"></div>
+                    {% endif %}
+                </div>
+
+                <div class="metrics">
+                    <span class="label">RSI (14)</span>
+                    <span class="value" style="color: {{ 'var(--red)' if a.rsi > 70 else 'var(--green)' if a.rsi < 30 else 'var(--text)' }}">
+                        {{ "%.1f"|format(a.rsi) }}
+                    </span>
+                    <span class="label">MACD</span>
+                    <span class="value">{{ "{:,.1f}".format(a.macd) }}</span>
+                    <span class="label">SMA-50</span>
+                    <span class="value">{{ "{:,.1f}".format(a.sma_50) }}</span>
+                    <span class="label">ATR (14)</span>
+                    <span class="value">{{ "%.1f"|format(a.atr) }}</span>
+                    <span class="label">Bollinger Hi</span>
+                    <span class="value">{{ "{:,.1f}".format(a.bb_upper) }}</span>
+                    <span class="label">Bollinger Lo</span>
+                    <span class="value">{{ "{:,.1f}".format(a.bb_lower) }}</span>
+                </div>
+
+                <table class="signals-table">
+                    <thead>
+                        <tr><th>Indicator</th><th>Signal</th><th>Detail</th></tr>
+                    </thead>
+                    <tbody>
+                    {% for s in a.signals %}
+                        <tr>
+                            <td>{{ s.name }}</td>
+                            <td class="{{ 'vote-bull' if s.vote > 0 else 'vote-bear' if s.vote < 0 else 'vote-neut' }}">
+                                {{ s.label }}
+                            </td>
+                            <td style="color: var(--dim);">{{ s.detail }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+
+                {% if a.bias != "NEUTRAL" %}
+                <div class="trade-box active">
+                    <h4 style="color: var(--blue);">
+                        {{ "LONG" if "BULLISH" in a.bias else "SHORT" }} Setup
+                    </h4>
+                    <div class="row"><span class="label">Entry</span><span>{{ a.suggested_entry }}</span></div>
+                    <div class="row"><span class="label">Stop Loss</span><span>{{ a.suggested_stop }}</span></div>
+                    <div class="row"><span class="label">Target (1:2 R:R)</span><span>{{ a.suggested_target }}</span></div>
+                </div>
+                {% else %}
+                <div class="trade-box wait">
+                    <h4 style="color: var(--yellow);">No Clear Setup</h4>
+                    <p style="color: var(--dim); margin: 0;">Mixed signals — wait for confirmation.</p>
+                </div>
+                {% endif %}
+            {% endif %}
+        </div>
+    {% endfor %}
+    </div>
+
+    <div class="footer-credit">
+        Made by Sean Matthee
+    </div>
+
+    <div class="countdown">
+        <span><span class="dot"></span> Live — auto-refreshes every {{ refresh_interval }}s</span>
+        <span id="timer">{{ refresh_interval }}s</span>
+    </div>
+
+    <script>
+        let seconds = {{ refresh_interval }};
+        const timer = document.getElementById('timer');
+        setInterval(() => {
+            seconds--;
+            timer.textContent = seconds + 's';
+            if (seconds <= 0) {
+                location.reload();
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
