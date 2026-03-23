@@ -29,6 +29,11 @@ WATCHLIST: dict[str, str] = {
     "Discovery": "DSY.JO",
     "Nedbank": "NED.JO",
     "Clicks Group": "CLS.JO",
+    # ── Insurance ────────────────────────────────────────────────────────
+    "Sanlam": "SLM.JO",
+    "Old Mutual": "OMU.JO",
+    "Momentum Metropolitan": "MTM.JO",
+    "Santam": "SNT.JO",
     # ── Indices ──────────────────────────────────────────────────────────
     "JSE Top 40": "^JN0U.JO",
     "JSE All Share": "^J203.JO",
@@ -42,6 +47,7 @@ CONFLUENCE_GROUPS: dict[str, list[str]] = {
     "Mining & Resources": ["AGL.JO", "BHG.JO", "GFI.JO", "ANG.JO", "SSW.JO", "SOL.JO"],
     "Tech & Media": ["NPN.JO", "PRX.JO", "MTN.JO", "VOD.JO"],
     "Retail & Consumer": ["SHP.JO", "WHL.JO", "CLS.JO", "DSY.JO"],
+    "Insurance": ["SLM.JO", "OMU.JO", "MTM.JO", "SNT.JO"],
     "Luxury": ["CFR.JO"],
     "Indices": ["^JN0U.JO", "^J203.JO"],
 }
