@@ -17,6 +17,7 @@ import pandas as pd
 import yfinance as yf
 
 from config import (
+    BATCH_SIZE,
     DATA_PERIOD,
     RSI_OVERBOUGHT,
     RSI_OVERSOLD,
@@ -66,6 +67,7 @@ class TickerAnalysis:
     suggested_entry: str = ""
     suggested_stop: str = ""
     suggested_target: str = ""
+    price_history: list[float] = field(default_factory=list)
     error: str = ""
 
 
@@ -276,16 +278,11 @@ def _suggest_trade(bias: str, close: float, atr: float) -> tuple[str, str, str]:
     return ("No clear setup", "—", "—")
 
 
-# ── Main analysis function ───────────────────────────────────────────────────
+# ── Shared analysis logic (works on a pre-fetched DataFrame) ─────────────────
 
-def analyse_ticker(name: str, symbol: str) -> TickerAnalysis:
-    """Run the full analysis pipeline for one ticker."""
+def _build_result(name: str, symbol: str, df: pd.DataFrame) -> TickerAnalysis:
+    """Compute indicators, score signals, and build a TickerAnalysis from a DataFrame."""
     result = TickerAnalysis(name=name, symbol=symbol, price=0.0, daily_change_pct=0.0)
-
-    df = fetch_data(symbol)
-    if df is None or len(df) < 30:
-        result.error = "Could not fetch sufficient data"
-        return result
 
     df = compute_indicators(df)
     latest = df.iloc[-1]
@@ -301,6 +298,9 @@ def analyse_ticker(name: str, symbol: str) -> TickerAnalysis:
     result.bb_upper = latest["BB_Upper"]
     result.bb_lower = latest["BB_Lower"]
     result.atr = latest["ATR"]
+
+    # Last 30 closing prices for sparkline charts
+    result.price_history = df["Close"].tail(30).tolist()
 
     # Score signals
     signals = score_signals(df)
@@ -337,11 +337,72 @@ def analyse_ticker(name: str, symbol: str) -> TickerAnalysis:
     return result
 
 
+# ── Single-ticker analysis (fetches its own data) ───────────────────────────
+
+def analyse_ticker(name: str, symbol: str) -> TickerAnalysis:
+    """Run the full analysis pipeline for one ticker."""
+    result = TickerAnalysis(name=name, symbol=symbol, price=0.0, daily_change_pct=0.0)
+
+    df = fetch_data(symbol)
+    if df is None or len(df) < 30:
+        result.error = "Could not fetch sufficient data"
+        return result
+
+    return _build_result(name, symbol, df)
+
+
+# ── Batch-optimized helper (uses pre-fetched DataFrame) ─────────────────────
+
+def _analyse_from_df(name: str, symbol: str, df: pd.DataFrame) -> TickerAnalysis:
+    """Run the full analysis pipeline using an already-fetched DataFrame."""
+    return _build_result(name, symbol, df)
+
+
+# ── Batch analysis of entire watchlist ───────────────────────────────────────
+
 def analyse_all(watchlist: dict[str, str]) -> list[TickerAnalysis]:
-    """Analyse every ticker in the watchlist with rate-limit spacing."""
+    """Analyse every ticker in the watchlist using batch downloads for speed."""
     results: list[TickerAnalysis] = []
-    for i, (name, symbol) in enumerate(watchlist.items()):
-        if i > 0:
-            time.sleep(1.5)  # Avoid Yahoo Finance rate limits
-        results.append(analyse_ticker(name, symbol))
+    items = list(watchlist.items())
+
+    # Process in batches
+    for batch_start in range(0, len(items), BATCH_SIZE):
+        batch = items[batch_start:batch_start + BATCH_SIZE]
+        symbols = [sym for _, sym in batch]
+
+        if batch_start > 0:
+            time.sleep(2)  # Rate limit between batches
+
+        # Batch download
+        try:
+            batch_data = yf.download(symbols, period=DATA_PERIOD, progress=False, group_by="ticker")
+        except Exception:
+            batch_data = None
+
+        for name, symbol in batch:
+            try:
+                if batch_data is not None and len(symbols) > 1:
+                    if symbol in batch_data.columns.get_level_values(0):
+                        df = batch_data[symbol].dropna(how="all")
+                        if isinstance(df.columns, pd.MultiIndex):
+                            df.columns = df.columns.get_level_values(0)
+                    else:
+                        df = None
+                elif batch_data is not None and len(symbols) == 1:
+                    df = batch_data
+                    if isinstance(df.columns, pd.MultiIndex):
+                        df.columns = df.columns.get_level_values(0)
+                else:
+                    df = None
+
+                if df is None or df.empty or len(df) < 30:
+                    # Fallback to single fetch
+                    result = analyse_ticker(name, symbol)
+                else:
+                    result = _analyse_from_df(name, symbol, df)
+
+                results.append(result)
+            except Exception:
+                results.append(analyse_ticker(name, symbol))
+
     return results

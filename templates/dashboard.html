@@ -6,6 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>JSE Market Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --bg: #0d1117;
@@ -56,7 +57,7 @@
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            margin-bottom: 14px;
+            margin-bottom: 10px;
         }
         .card-header h2 { font-size: 18px; }
         .card-header .price { font-size: 22px; font-weight: 700; }
@@ -78,9 +79,15 @@
         .change-positive { color: var(--green); }
         .change-negative { color: var(--red); }
 
+        .sparkline-container {
+            width: 100%;
+            height: 60px;
+            margin: 8px 0;
+        }
+
         .score-bar {
             height: 6px; border-radius: 3px; background: var(--border);
-            margin: 12px 0; overflow: hidden;
+            margin: 10px 0; overflow: hidden;
         }
         .score-bar .fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
         .score-bar .fill.bullish { background: var(--green); }
@@ -212,7 +219,7 @@
             color: var(--text);
             font-size: 14px;
             outline: none;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
             transition: border-color 0.2s;
         }
         .search-bar:focus {
@@ -227,6 +234,19 @@
             padding: 40px 0;
             font-size: 15px;
             display: none;
+        }
+        .filter-row {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+            align-items: center;
+        }
+        .filter-sep {
+            width: 1px;
+            height: 20px;
+            background: var(--border);
+            margin: 0 2px;
         }
 
         @media (max-width: 600px) {
@@ -286,21 +306,18 @@
     </div>
     {% endif %}
 
-    <input type="text" class="search-bar" id="searchBar" placeholder="Search by name, ticker, sector, or bias (e.g. 'banking', 'bullish', 'naspers', 'SLM')..." autocomplete="off">
+    <input type="text" class="search-bar" id="searchBar" placeholder="Search by name, ticker, sector, or bias..." autocomplete="off">
 
-    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+    <div class="filter-row">
         <button class="filter-btn active" data-filter="all" onclick="filterBy('all', this)">All</button>
         <button class="filter-btn" data-filter="bullish" onclick="filterBy('bullish', this)">Bullish</button>
         <button class="filter-btn" data-filter="bearish" onclick="filterBy('bearish', this)">Bearish</button>
         <button class="filter-btn" data-filter="neutral" onclick="filterBy('neutral', this)">Neutral</button>
-        <span style="width: 1px; background: var(--border); margin: 0 4px;"></span>
-        <button class="filter-btn" data-filter="banking" onclick="filterBy('banking', this)">Banking</button>
-        <button class="filter-btn" data-filter="mining" onclick="filterBy('mining', this)">Mining</button>
-        <button class="filter-btn" data-filter="tech" onclick="filterBy('tech', this)">Tech & Media</button>
-        <button class="filter-btn" data-filter="retail" onclick="filterBy('retail', this)">Retail</button>
-        <button class="filter-btn" data-filter="insurance" onclick="filterBy('insurance', this)">Insurance</button>
-        <button class="filter-btn" data-filter="motor" onclick="filterBy('motor', this)">Motor Vehicles</button>
-        <button class="filter-btn" data-filter="luxury" onclick="filterBy('luxury', this)">Luxury</button>
+        <span class="filter-sep"></span>
+        {% for sname in sector_names %}
+        {% set slug = sname|lower|replace(' & ', '-')|replace(' / ', '-')|replace(' ', '-') %}
+        <button class="filter-btn" data-filter="{{ slug }}" onclick="filterBy('{{ slug }}', this)">{{ sname }}</button>
+        {% endfor %}
     </div>
 
     <div class="no-results" id="noResults">No tickers match your search.</div>
@@ -311,7 +328,7 @@
              data-name="{{ a.name|lower }}"
              data-symbol="{{ a.symbol|lower }}"
              data-bias="{{ a.bias|lower }}"
-             data-sector="{% if a.symbol in ['FSR.JO','SBK.JO','ABG.JO','CPI.JO','NED.JO'] %}banking{% elif a.symbol in ['AGL.JO','BHG.JO','GFI.JO','ANG.JO','SSW.JO','SOL.JO'] %}mining{% elif a.symbol in ['NPN.JO','PRX.JO','MTN.JO','VOD.JO'] %}tech{% elif a.symbol in ['SHP.JO','WHL.JO','CLS.JO','DSY.JO'] %}retail{% elif a.symbol in ['SLM.JO','OMU.JO','MTM.JO','SNT.JO','OUT.JO'] %}insurance{% elif a.symbol in ['MTH.JO','CMH.JO','SPG.JO'] %}motor{% elif a.symbol in ['CFR.JO'] %}luxury{% elif a.symbol in ['^JN0U.JO','^J203.JO'] %}indices{% else %}other{% endif %}">
+             data-sector="{{ sector_map.get(a.symbol, 'other') }}">
             <div class="card-header">
                 <div>
                     <h2>{{ a.name }}</h2>
@@ -328,6 +345,12 @@
             {% if a.error %}
                 <p class="error-msg">{{ a.error }}</p>
             {% else %}
+                {% if a.price_history %}
+                <div class="sparkline-container">
+                    <canvas id="chart-{{ loop.index }}"></canvas>
+                </div>
+                {% endif %}
+
                 <span class="badge {{ a.bias|lower|replace(' ', '-') }}">{{ a.bias }}</span>
 
                 <div class="score-label">
@@ -409,6 +432,7 @@
     </div>
 
     <script>
+        // ── Auto-refresh countdown ──────────────────────────────────────
         let seconds = {{ refresh_interval }};
         const timer = document.getElementById('timer');
         setInterval(() => {
@@ -419,7 +443,7 @@
             }
         }, 1000);
 
-        // Search & filter
+        // ── Search & filter ─────────────────────────────────────────────
         const searchBar = document.getElementById('searchBar');
         const grid = document.getElementById('tickerGrid');
         const cards = grid.querySelectorAll('.card');
@@ -436,14 +460,12 @@
                 const bias = card.dataset.bias || '';
                 const sector = card.dataset.sector || '';
 
-                // Text search match
                 const matchesSearch = !query ||
                     name.includes(query) ||
                     symbol.includes(query) ||
                     bias.includes(query) ||
                     sector.includes(query);
 
-                // Filter button match
                 let matchesFilter = true;
                 if (activeFilter === 'bullish') {
                     matchesFilter = bias.includes('bullish');
@@ -474,6 +496,56 @@
             btn.classList.add('active');
             applyFilters();
         }
+
+        // ── Sparkline charts (Chart.js) ─────────────────────────────────
+        const chartData = {
+            {% for a in analyses %}
+            {% if a.price_history %}
+            "chart-{{ loop.index }}": {
+                data: {{ a.price_history | tojson }},
+                color: "{{ '#3fb950' if a.daily_change_pct >= 0 else '#f85149' }}"
+            },
+            {% endif %}
+            {% endfor %}
+        };
+
+        Object.entries(chartData).forEach(([id, info]) => {
+            const canvas = document.getElementById(id);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+
+            const gradient = ctx.createLinearGradient(0, 0, 0, 60);
+            gradient.addColorStop(0, info.color + '30');
+            gradient.addColorStop(1, info.color + '00');
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: info.data.map((_, i) => i),
+                    datasets: [{
+                        data: info.data,
+                        borderColor: info.color,
+                        backgroundColor: gradient,
+                        borderWidth: 1.5,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0,
+                        pointHitRadius: 0,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                    scales: {
+                        x: { display: false },
+                        y: { display: false }
+                    },
+                    elements: { line: { borderCapStyle: 'round' } }
+                }
+            });
+        });
     </script>
 </body>
 </html>

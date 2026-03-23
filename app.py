@@ -172,6 +172,14 @@ def health() -> str:
     return "ok"
 
 
+# Build reverse lookup: symbol -> sector slug (for template filtering)
+_SECTOR_MAP: dict[str, str] = {}
+for _group_name, _symbols in CONFLUENCE_GROUPS.items():
+    _slug = _group_name.lower().replace(" & ", "-").replace(" / ", "-").replace(" ", "-")
+    for _sym in _symbols:
+        _SECTOR_MAP[_sym] = _slug
+
+
 @app.route("/")
 def index() -> str:
     analyses, confluence, last_scan = _get_latest()
@@ -181,6 +189,8 @@ def index() -> str:
         confluence=confluence,
         last_scan=last_scan,
         refresh_interval=60,
+        sector_map=_SECTOR_MAP,
+        sector_names=list(CONFLUENCE_GROUPS.keys()),
     )
 
 
