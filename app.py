@@ -199,13 +199,30 @@ def _keep_alive() -> None:
 
 # ── Scheduler ────────────────────────────────────────────────────────────────
 
-scheduler = BackgroundScheduler(daemon=True)
-scheduler.add_job(_run_scan, "interval", seconds=SCAN_INTERVAL_SECONDS, id="scan")
-scheduler.add_job(_keep_alive, "interval", minutes=10, id="keepalive")
-scheduler.start()
+_scheduler_started = False
 
-# Run first scan in a background thread so gunicorn boots immediately
-threading.Thread(target=_run_scan, daemon=True).start()
+
+def _ensure_scheduler() -> None:
+    """Start the scheduler and first scan once (called on first request)."""
+    global _scheduler_started
+    if _scheduler_started:
+        return
+    _scheduler_started = True
+
+    scheduler = BackgroundScheduler(daemon=True)
+    scheduler.add_job(_run_scan, "interval", seconds=SCAN_INTERVAL_SECONDS, id="scan")
+    scheduler.add_job(_keep_alive, "interval", minutes=10, id="keepalive")
+    scheduler.start()
+
+    # Run first scan in background thread so response returns immediately
+    threading.Thread(target=_run_scan, daemon=True).start()
+    print("[Startup] Scheduler started, first scan running in background")
+
+
+@app.before_request
+def before_request() -> None:
+    """Ensure scheduler is running inside the worker process."""
+    _ensure_scheduler()
 
 
 # ── Local dev entry point ────────────────────────────────────────────────────
