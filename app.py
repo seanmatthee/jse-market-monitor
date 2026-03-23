@@ -204,8 +204,8 @@ scheduler.add_job(_run_scan, "interval", seconds=SCAN_INTERVAL_SECONDS, id="scan
 scheduler.add_job(_keep_alive, "interval", minutes=10, id="keepalive")
 scheduler.start()
 
-# Run first scan immediately on startup
-_run_scan()
+# Run first scan in a background thread so gunicorn boots immediately
+threading.Thread(target=_run_scan, daemon=True).start()
 
 
 # ── Local dev entry point ────────────────────────────────────────────────────
